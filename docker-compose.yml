@@ -2,8 +2,9 @@
 # stack start even without a .env file.
 
 # One project (and one set of volumes) per Odoo version, so switching
-# ODOO_VERSION never points a newer Odoo at an older database.
-name: ${PROJECT_NAME:-odoo-${ODOO_VERSION:-20}}
+# ODOO_VERSION never points a newer Odoo at an older database. PROJECT_NAME is
+# only a prefix, so that separation holds even when it is customised.
+name: ${PROJECT_NAME:-odoo}-${ODOO_VERSION:-20}
 
 services:
   db:
@@ -13,7 +14,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-odoo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-odoo}
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5433}:5432"
+      # Always local: these credentials are not meant to be exposed to a network.
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
@@ -37,6 +39,8 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
       ODOO_DB: ${ODOO_DB:-odoo}
       ODOO_DEV_MODE: ${ODOO_DEV_MODE:-}
+      # Checked against the version inside the image (see ODOO_TAG).
+      EXPECTED_ODOO_VERSION: ${ODOO_VERSION:-20}
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${ODOO_PORT:-8069}:8069"
     volumes:
@@ -69,7 +73,8 @@ services:
       PGADMIN_CONFIG_SERVER_MODE: "False"
       PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${PGADMIN_PORT:-5050}:80"
+      # Always local: desktop mode has no login.
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
     volumes:
       - ./config/pgadmin-servers.json:/pgadmin4/servers.json:ro
       - pgadmin-data:/var/lib/pgadmin
