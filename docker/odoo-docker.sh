@@ -24,6 +24,15 @@ PGUSER="$(conf_get db_user)"
 PGPASSWORD="$(conf_get db_password)"
 export PGHOST PGPORT PGUSER PGPASSWORD
 
+# The plain master password. Not read from $CONF: when the password is "admin", the
+# database manager replaces it there with a hash, which it then rejects as a password.
+master_password() {
+    local value
+    value="$(sed -n "s/^[[:space:]]*admin_passwd[[:space:]]*=[[:space:]]*//p" /etc/odoo/odoo.base.conf 2> /dev/null \
+        | tail -n1 | tr -d '\r')"
+    echo "${value:-${ADMIN_PASSWORD:-admin}}"
+}
+
 default_db() {
     echo "${1:-${ODOO_DB:-odoo}}"
 }
@@ -130,7 +139,7 @@ case "$cmd" in
         file="$BACKUP_DIR/${db}_$(date +%Y%m%d_%H%M%S).zip"
         echo "Backing up '$db' (database + filestore)..."
         curl -sS --fail -o "$file" \
-            --form-string "master_pwd=$(conf_get admin_passwd)" \
+            --form-string "master_pwd=$(master_password)" \
             --form-string "name=$db" \
             --form-string "backup_format=zip" \
             "$HTTP_URL/web/database/backup"
@@ -150,7 +159,7 @@ case "$cmd" in
         wait_for_http
         echo "Restoring backups/$(basename "$file") as '$db'..."
         curl -sS --fail -o /dev/null \
-            --form-string "master_pwd=$(conf_get admin_passwd)" \
+            --form-string "master_pwd=$(master_password)" \
             --form-string "name=$db" \
             --form-string "copy=true" \
             -F "backup_file=@$file" \
