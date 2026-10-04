@@ -44,6 +44,7 @@ Odoo (DB defaults to ODOO_DB from .env):
   dbs                      List databases
   backup [db]              Save a backup zip into backups\
   restore <file> [db]      Restore a zip from backups\ as a new database
+                           (add --neutralize for a copy of a production database)
   scaffold <name>          Create a new module in addons\custom
 '@
 

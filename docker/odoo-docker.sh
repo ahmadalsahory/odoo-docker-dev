@@ -72,6 +72,7 @@ Database commands (DB defaults to ODOO_DB from .env):
   dbs                      List databases
   backup [db]              Save a backup zip into backups/ (restorable from the web UI too)
   restore <file> [db]      Restore a zip from backups/ as a new database
+                           (add --neutralize for a copy of a production database)
 
 Development:
   scaffold <name>          Create a new module skeleton in addons/custom
@@ -151,6 +152,18 @@ case "$cmd" in
         ;;
 
     restore)
+        # --neutralize may appear anywhere among the arguments.
+        neutralize=()
+        args=()
+        for arg in "$@"; do
+            if [ "$arg" = --neutralize ]; then
+                # Odoo treats any value as true, so the field is only sent when wanted.
+                neutralize=(--form-string "neutralize_database=true")
+            else
+                args+=("$arg")
+            fi
+        done
+        set -- "${args[@]}"
         [ $# -ge 1 ] || die "missing file name. Example: restore mydb_20260101_120000.zip"
         file="$BACKUP_DIR/$(basename "$1")"
         [ -f "$file" ] || die "file not found: backups/$(basename "$1")"
@@ -162,10 +175,15 @@ case "$cmd" in
             --form-string "master_pwd=$(master_password)" \
             --form-string "name=$db" \
             --form-string "copy=true" \
+            "${neutralize[@]}" \
             -F "backup_file=@$file" \
             "$HTTP_URL/web/database/restore"
         db_exists "$db" || die "restore failed. Check the master password and the Odoo logs."
-        echo "Restored '$db'."
+        if [ ${#neutralize[@]} -gt 0 ]; then
+            echo "Restored '$db', neutralized: no emails sent, scheduled actions and payment providers off."
+        else
+            echo "Restored '$db'."
+        fi
         ;;
 
     scaffold)

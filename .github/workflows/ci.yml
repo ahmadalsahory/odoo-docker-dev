@@ -62,8 +62,14 @@ jobs:
       - name: Backup and restore
         run: |
           ./odoo.sh backup
-          ./odoo.sh restore "$(basename "$(ls backups/*.zip | head -n1)")" restored
+          file="$(basename "$(ls backups/*.zip | head -n1)")"
+          ./odoo.sh restore "$file" restored
           ./odoo.sh dbs | grep -x restored
+          # A second round catches master password problems that only show after a restore.
+          ./odoo.sh restore "$file" neutral --neutralize
+          ./odoo.sh psql neutral <<< "SELECT value FROM ir_config_parameter WHERE key = 'database.is_neutralized'" \
+            | grep -qx ' true'
+          ./odoo.sh backup restored
 
       - name: Show logs
         if: failure()
