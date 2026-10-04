@@ -22,7 +22,9 @@ It is meant for local development and testing: write modules, try features, repr
 | Docker | [Docker Desktop](https://www.docker.com/products/docker-desktop/) | [Docker Engine](https://docs.docker.com/engine/install/) with the Compose plugin |
 | Git | [git-scm.com](https://git-scm.com/downloads) | your package manager |
 
-Check that Docker works: `docker compose version` should print `v2.x` or newer.
+Check that Docker works: `docker compose version` should print `v2.20` or newer.
+
+On Windows, use PowerShell with `odoo.ps1`. Git Bash works too, with `odoo.sh`.
 
 ## Quick start
 
@@ -35,31 +37,51 @@ git clone https://github.com/<your-account>/odoo-docker.git
 cd odoo-docker
 ```
 
-**2. (Enterprise only) Add the Enterprise source**
+**2. Choose your Odoo version**
 
-Skip this step for Community. Otherwise use the branch that matches your Odoo version:
+Create your settings file:
 
-```bash
-git clone --branch 20.0 --depth 1 https://github.com/odoo/enterprise.git addons/enterprise
-```
+| Linux / macOS / Git Bash | Windows PowerShell |
+|---|---|
+| `cp .env.example .env` | `Copy-Item .env.example .env` |
 
-**3. Start Odoo**
+Open `.env` and set `ODOO_VERSION` to `17`, `18`, `19` or `20`: just the number, without `.0` (default: `20`). Everything else can stay as it is.
+
+**3. (Enterprise only) Add the Enterprise source**
+
+Skip this step for Community. Otherwise run the command for **the same version as `ODOO_VERSION`**:
+
+| `ODOO_VERSION` | Command |
+|---|---|
+| `20` | `git clone --branch 20.0 --depth 1 https://github.com/odoo/enterprise.git addons/enterprise` |
+| `19` | `git clone --branch 19.0 --depth 1 https://github.com/odoo/enterprise.git addons/enterprise` |
+| `18` | `git clone --branch 18.0 --depth 1 https://github.com/odoo/enterprise.git addons/enterprise` |
+| `17` | `git clone --branch 17.0 --depth 1 https://github.com/odoo/enterprise.git addons/enterprise` |
+
+Enterprise and Odoo must be the same version. When they are not, Odoo usually fails in confusing ways (the log shows a warning when it can detect it).
+
+The repository is private: Git asks you to log in, and GitHub does not accept your account password there. See [authenticating to GitHub](docs/enterprise.md#getting-the-source).
+
+**4. Start Odoo**
 
 | Linux / macOS / Git Bash | Windows PowerShell |
 |---|---|
 | `./odoo.sh up` | `.\odoo.ps1 up` |
 
-The first start downloads about 1 GB of images and takes a few minutes. A `.env` file with the default settings is created for you.
+The first start downloads about 1 GB of images and takes a few minutes.
 
 > [!NOTE]
 > If PowerShell says that running scripts is disabled, run this once and try again:
 > `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
 
-**4. Create a database**
+**5. Create a database**
 
-Open <http://localhost:8069> and fill in the form. The **Master Password** is `admin` (`ADMIN_PASSWORD` in `.env`).
+Open the URL printed by `up` (<http://localhost:8069> unless you changed `ODOO_PORT`) and fill in the form:
 
-**5. Stop when you are done**
+- **Master Password**: `admin` (`ADMIN_PASSWORD` in `.env`)
+- **Database Name**: `odoo`. This is `ODOO_DB` in `.env`, the database that helper commands such as `install` use when you do not name one.
+
+**6. Stop when you are done**
 
 `./odoo.sh down` or `.\odoo.ps1 down`. Your databases are kept for next time.
 
@@ -73,7 +95,7 @@ Use `./odoo.sh <command>` on Linux, macOS and Git Bash, or `.\odoo.ps1 <command>
 | `down` | Stop and remove the containers. Data is kept |
 | `restart` | Restart Odoo, e.g. after changing Python code or `config/odoo.conf` |
 | `logs` | Follow the Odoo log (`logs db` for PostgreSQL) |
-| `status` | Show whether the containers are running and healthy |
+| `status` | Show the containers, the Odoo version, the addons path and the databases |
 | `install <modules> [db]` | Install modules, e.g. `install sale,crm` |
 | `update <modules> [db]` | Update modules after changing their code or data |
 | `test <modules>` | Run a module's tests in a fresh, throwaway database |
@@ -84,10 +106,10 @@ Use `./odoo.sh <command>` on Linux, macOS and Git Bash, or `.\odoo.ps1 <command>
 | `backup [db]` | Save database and attachments to `backups/` as a zip |
 | `restore <file> [db]` | Restore a zip from `backups/` as a new database |
 | `bash` | Open a terminal inside the Odoo container |
-| `tools` | Start pgAdmin at <http://localhost:5050> |
+| `tools` | Start pgAdmin (<http://localhost:5050> unless you changed `PGADMIN_PORT`) |
 | `reset` | Delete the containers **and all data** of this project (asks first) |
 
-`[db]` is optional and defaults to `ODOO_DB` in `.env` (`odoo`). Prefer plain Docker commands? See [docs/commands.md](docs/commands.md) for the equivalent of each one.
+`[db]` is optional and defaults to `ODOO_DB` in `.env` (`odoo`). `install` creates that database if it does not exist yet, and says so. Odoo must be running (`up`) for every command except `up`, `down` and `reset`. Prefer plain Docker commands? See [docs/commands.md](docs/commands.md) for the equivalent of each one.
 
 ## Developing a module
 
@@ -110,11 +132,12 @@ Modules copied into `addons/custom` by hand work too. If the folder was empty wh
 
 ## Switching Odoo version
 
-1. Set `ODOO_VERSION` in `.env` (`17`, `18`, `19` or `20`).
-2. Enterprise only: check out the matching branch in `addons/enterprise` (e.g. `git -C addons/enterprise checkout 19.0`, after a full clone).
-3. Run `up`.
+1. Run `down` **before** editing `.env`. The helper commands always act on the version currently in `.env`, so once you change it they can no longer stop the old one.
+2. Set `ODOO_VERSION` in `.env` (`17`, `18`, `19` or `20`).
+3. Enterprise only: switch `addons/enterprise` to the matching branch. See [switching versions](docs/enterprise.md#switching-versions).
+4. Run `up`.
 
-Every version gets its own containers and data volumes (`odoo-19`, `odoo-20`...), so switching never breaks the databases of another version. To run two versions at the same time, use two copies of this template with different ports. See [docs/configuration.md](docs/configuration.md#running-several-instances).
+Every version gets its own containers and data volumes (`odoo-19`, `odoo-20`...), so switching never breaks the databases of another version. Switching back later finds your databases where you left them. To run two versions at the same time, use two copies of this template with different ports. See [docs/configuration.md](docs/configuration.md#running-several-instances).
 
 > [!NOTE]
 > Odoo officially supports the three latest major versions. Odoo 17 images are still published but it no longer gets standard support.
