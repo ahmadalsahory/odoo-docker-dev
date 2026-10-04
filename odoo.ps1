@@ -76,7 +76,7 @@ function Invoke-ComposeExec {
 }
 
 function Invoke-Helper {
-    Invoke-ComposeExec odoo odoo-docker @args
+    Invoke-ComposeExec odoo odoo-docker-dev @args
 }
 
 function Invoke-OdooRestart {

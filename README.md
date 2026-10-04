@@ -1,4 +1,4 @@
-# odoo-docker
+# odoo-docker-dev
 
 Run **Odoo 17, 18, 19 or 20** on your own machine with Docker, in **Community** or **Enterprise** edition, on Windows, macOS or Linux.
 
@@ -33,8 +33,8 @@ On Windows, use PowerShell with `odoo.ps1`. Git Bash works too, with `odoo.sh`.
 Click **Use this template** on GitHub to create your own copy, or clone it directly:
 
 ```bash
-git clone https://github.com/<your-account>/odoo-docker.git
-cd odoo-docker
+git clone https://github.com/<your-account>/odoo-docker-dev.git
+cd odoo-docker-dev
 ```
 
 **2. Choose your Odoo version**
@@ -145,7 +145,7 @@ Every version gets its own containers and data volumes (`odoo-19`, `odoo-20`...)
 ## Project structure
 
 ```text
-odoo-docker/
+odoo-docker-dev/
 ├── addons/
 │   ├── custom/            Your modules (committed)
 │   ├── enterprise/        Odoo Enterprise source (never committed)
@@ -156,7 +156,7 @@ odoo-docker/
 │   └── pgadmin-servers.json
 ├── docker/
 │   ├── entrypoint.sh      Builds the final Odoo config at container start
-│   └── odoo-docker.sh     The helper behind install, update, test, backup...
+│   └── odoo-docker-dev.sh     The helper behind install, update, test, backup...
 ├── docs/                  Detailed guides
 ├── .env.example           All settings, documented. Copied to .env on first run
 ├── docker-compose.yml

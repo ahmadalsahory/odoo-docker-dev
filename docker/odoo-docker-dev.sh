@@ -61,7 +61,7 @@ list_dbs() {
 
 usage() {
     cat <<'EOF'
-Usage: odoo-docker <command> [arguments]
+Usage: odoo-docker-dev <command> [arguments]
 
 Database commands (DB defaults to ODOO_DB from .env):
   install <modules> [db]   Install comma-separated modules (creates the database if needed)
@@ -84,7 +84,7 @@ shift || true
 
 # Refresh addons_path so modules added since the container started are found.
 case "$cmd" in
-    install|update|test|shell) odoo-docker-entrypoint --configure-only ;;
+    install|update|test|shell) odoo-docker-dev-entrypoint --configure-only ;;
 esac
 
 case "$cmd" in

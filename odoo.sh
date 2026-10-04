@@ -58,7 +58,7 @@ compose_exec() {
     $WINPTY docker compose exec $TTY_FLAG "$@"
 }
 
-helper() { compose_exec odoo odoo-docker "$@"; }
+helper() { compose_exec odoo odoo-docker-dev "$@"; }
 
 # Restart Odoo and return only once it answers again.
 restart_odoo() {
@@ -272,7 +272,7 @@ case "$cmd" in
         ;;
     scaffold)
         # Create files as the current user so they stay editable on Linux.
-        compose_exec -u "$(id -u):$(id -g)" odoo odoo-docker scaffold "$@"
+        compose_exec -u "$(id -u):$(id -g)" odoo odoo-docker-dev scaffold "$@"
         # Restart so the server rescans addons/custom (it may have been empty until now).
         restart_odoo
         ;;

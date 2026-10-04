@@ -7,7 +7,7 @@ The helper scripts are thin shortcuts around Docker Compose:
 
 Both accept the same commands. Run `./odoo.sh help` for the list.
 
-Anything that needs to run inside the container (install, test, backup...) is implemented once, in [`docker/odoo-docker.sh`](../docker/odoo-docker.sh), so it behaves the same on every operating system.
+Anything that needs to run inside the container (install, test, backup...) is implemented once, in [`docker/odoo-docker-dev.sh`](../docker/odoo-docker-dev.sh), so it behaves the same on every operating system.
 
 You do not have to use the scripts. Every command below shows its plain `docker compose` equivalent, run from the project folder.
 
@@ -19,7 +19,7 @@ You do not have to use the scripts. Every command below shows its plain `docker 
 | `down` | `docker compose down` |
 | `restart` | `docker compose restart odoo` then `docker compose up -d --wait odoo` |
 | `logs [service]` | `docker compose logs -f --tail 200 odoo` |
-| `status` | `docker compose ps` then `docker compose exec odoo odoo-docker info` |
+| `status` | `docker compose ps` then `docker compose exec odoo odoo-docker-dev info` |
 | `bash` | `docker compose exec odoo bash` |
 | `tools` | `docker compose --profile tools up -d pgadmin` |
 | `reset` | `docker compose --profile tools down -v` |
@@ -37,15 +37,15 @@ The second command of `restart` waits until Odoo answers again, so the next comm
 
 | Helper | Docker Compose |
 |---|---|
-| `install sale,crm [db]` | `docker compose exec odoo odoo-docker install sale,crm [db]` then `restart` |
-| `update sale,crm [db]` | `docker compose exec odoo odoo-docker update sale,crm [db]` then `restart` |
-| `test my_module` | `docker compose exec odoo odoo-docker test my_module` |
-| `shell [db]` | `docker compose exec odoo odoo-docker shell [db]` |
-| `psql [db]` | `docker compose exec odoo odoo-docker psql [db]` |
-| `dbs` | `docker compose exec odoo odoo-docker dbs` |
-| `backup [db]` | `docker compose exec odoo odoo-docker backup [db]` |
-| `restore <file> [db]` | `docker compose exec odoo odoo-docker restore <file> [db]` |
-| `scaffold <name>` | `docker compose exec -u "$(id -u):$(id -g)" odoo odoo-docker scaffold <name>` then `restart` (on Windows, leave out `-u ...`) |
+| `install sale,crm [db]` | `docker compose exec odoo odoo-docker-dev install sale,crm [db]` then `restart` |
+| `update sale,crm [db]` | `docker compose exec odoo odoo-docker-dev update sale,crm [db]` then `restart` |
+| `test my_module` | `docker compose exec odoo odoo-docker-dev test my_module` |
+| `shell [db]` | `docker compose exec odoo odoo-docker-dev shell [db]` |
+| `psql [db]` | `docker compose exec odoo odoo-docker-dev psql [db]` |
+| `dbs` | `docker compose exec odoo odoo-docker-dev dbs` |
+| `backup [db]` | `docker compose exec odoo odoo-docker-dev backup [db]` |
+| `restore <file> [db]` | `docker compose exec odoo odoo-docker-dev restore <file> [db]` |
+| `scaffold <name>` | `docker compose exec -u "$(id -u):$(id -g)" odoo odoo-docker-dev scaffold <name>` then `restart` (on Windows, leave out `-u ...`) |
 
 ### install / update
 

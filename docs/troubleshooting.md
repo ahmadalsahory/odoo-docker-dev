@@ -8,7 +8,7 @@ Start here. Most problems explain themselves:
 ./odoo.sh logs db    # PostgreSQL log
 ```
 
-Lines starting with `[odoo-docker] WARNING` at the top of the Odoo log point at a setup problem. They are explained [below](#warnings-in-the-log).
+Lines starting with `[odoo-docker-dev] WARNING` at the top of the Odoo log point at a setup problem. They are explained [below](#warnings-in-the-log).
 
 ## Docker is not running
 
@@ -107,7 +107,7 @@ For the best speed, keep the project inside WSL 2:
 
 1. Install WSL 2 and Ubuntu: `wsl --install` in an administrator PowerShell.
 2. In Docker Desktop, enable **Settings > Resources > WSL integration** for Ubuntu.
-3. Open Ubuntu, clone the project there (for example into `~/odoo-docker`) and use `./odoo.sh`.
+3. Open Ubuntu, clone the project there (for example into `~/odoo-docker-dev`) and use `./odoo.sh`.
 4. Edit the files from Windows with VS Code: run `code .` inside the project in Ubuntu.
 
 This also makes `ODOO_DEV_MODE=reload` work.
