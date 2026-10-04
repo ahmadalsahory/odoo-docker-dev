@@ -1,0 +1,6 @@
+# Send only what the Dockerfile needs. This keeps builds fast and guarantees
+# that addons (including Enterprise source), backups and .env never end up in the image.
+*
+!Dockerfile
+!requirements.txt
+!docker/

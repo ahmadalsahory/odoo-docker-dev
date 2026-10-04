@@ -1,0 +1,5 @@
+# Extra Python packages needed by your custom or third-party modules.
+# One package per line, then rebuild with: ./odoo.sh up (or .\odoo.ps1 up)
+#
+# Example:
+# pandas==2.2.3
