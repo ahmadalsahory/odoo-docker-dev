@@ -2,7 +2,15 @@
 
 Run **Odoo 17, 18, 19 or 20** on your own machine with Docker, in **Community** or **Enterprise** edition, on Windows, macOS or Linux.
 
-It is meant for local development and testing: write modules, try features, reproduce bugs. It is not a production deployment.
+It is meant for local development and testing: write modules, try features, reproduce bugs.
+
+> [!WARNING]
+> **Not for production.** Do not use this project to run a live Odoo on a server. Its settings are chosen for convenience on your own machine, and are unsafe anywhere else:
+>
+> - Known default passwords (`admin` for the database manager, `odoo` for PostgreSQL).
+> - The database manager is open, so anyone who reaches Odoo can download or delete databases.
+> - pgAdmin has no login.
+> - Odoo runs as a single process, without HTTPS, automatic backups or a mail server.
 
 - One command to start, one URL to open
 - Community out of the box. Enterprise is used automatically as soon as you add its source code
