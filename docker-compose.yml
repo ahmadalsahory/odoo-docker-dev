@@ -55,6 +55,27 @@ services:
       start_interval: 2s
     restart: unless-stopped
 
+  # Optional database UI: ./odoo.sh tools (or .\odoo.ps1 tools)
+  pgadmin:
+    image: dpage/pgadmin4:9
+    profiles: ["tools"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      # Desktop mode: no pgAdmin login screen. Fine for a local-only tool.
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - ./config/pgadmin-servers.json:/pgadmin4/servers.json:ro
+      - pgadmin-data:/var/lib/pgadmin
+    restart: unless-stopped
+
 volumes:
   db-data:
   odoo-data:
+  pgadmin-data:
