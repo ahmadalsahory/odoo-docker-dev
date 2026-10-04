@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: ShellCheck
+        run: shellcheck odoo.sh docker/*.sh
+
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.22.0 -Scope CurrentUser -Force
+          $results = Invoke-ScriptAnalyzer -Path ./odoo.ps1 -Severity Warning, Error
+          $results | Format-Table -AutoSize RuleName, Line, Message
+          if ($results) { exit 1 }
+
+      - name: Validate docker-compose.yml
+        run: docker compose --profile tools config --quiet
+
+  # Community smoke test of every supported version (Enterprise cannot run in public CI).
+  smoke:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        odoo: ["17", "18", "19", "20"]
+    env:
+      ODOO_VERSION: ${{ matrix.odoo }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Start the stack
+        run: ./odoo.sh up
+
+      - name: Create a database
+        run: ./odoo.sh install base
+
+      - name: Scaffold, install and test a module
+        run: |
+          ./odoo.sh scaffold ci_module
+          ./odoo.sh install ci_module
+          ./odoo.sh test ci_module
+
+      - name: Backup and restore
+        run: |
+          ./odoo.sh backup
+          ./odoo.sh restore "$(basename "$(ls backups/*.zip | head -n1)")" restored
+          ./odoo.sh dbs | grep -x restored
+
+      - name: Show logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Clean up
+        if: always()
+        run: docker compose down -v
