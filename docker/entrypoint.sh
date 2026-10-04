@@ -39,13 +39,45 @@ collect_addons_paths() {
     return 0
 }
 
-warn_on_suspicious_enterprise() {
-    local dir=/mnt/enterprise-addons
-    if [ -f "$dir/base/__manifest__.py" ] || [ -f "$dir/web/__manifest__.py" ]; then
-        log "WARNING: addons/enterprise contains 'base' or 'web'. It looks like a full"
-        log "WARNING: Odoo source tree, not the odoo/enterprise repository. Community"
-        log "WARNING: modules from the image may be shadowed by a different version."
+# ODOO_VERSION inside the container is set by the official image (e.g. 20.0).
+# EXPECTED_ODOO_VERSION is the value from .env (e.g. 20).
+warn_on_version_mismatch() {
+    local expected="${EXPECTED_ODOO_VERSION:-}"
+    [ -n "$expected" ] && [ -n "${ODOO_VERSION:-}" ] || return 0
+    if [ "$expected.0" != "$ODOO_VERSION" ]; then
+        log "WARNING: ODOO_VERSION in .env is '$expected' but the image runs Odoo $ODOO_VERSION."
+        log "WARNING: ODOO_VERSION must be a major version such as 20 (no .0), and ODOO_TAG,"
+        log "WARNING: if set, must start with the same version (e.g. $expected.0-20260926)."
     fi
+}
+
+# These checks only warn: a wrong guess must never stop Odoo from starting.
+warn_on_suspicious_enterprise() {
+    local dir=/mnt/enterprise-addons head branch
+
+    # A full Odoo source tree (odoo/odoo clone or source archive) instead of odoo/enterprise.
+    if compgen -G "$dir/base/__manifest__.py" > /dev/null \
+        || compgen -G "$dir/*/web/__manifest__.py" > /dev/null \
+        || compgen -G "$dir/web/__manifest__.py" > /dev/null \
+        || compgen -G "$dir/odoo-bin" > /dev/null \
+        || compgen -G "$dir/*/odoo-bin" > /dev/null; then
+        log "WARNING: The Enterprise folder looks like a full Odoo source tree, not the"
+        log "WARNING: odoo/enterprise repository. Community modules from the image may be"
+        log "WARNING: shadowed by a different version. See docs/enterprise.md."
+    fi
+
+    # Compare the checked-out branch with the server version. Only branches named like
+    # a version are checked, so custom branches and archives without .git are left alone.
+    [ -f "$dir/.git/HEAD" ] || return 0
+    head="$(tr -d '\r' < "$dir/.git/HEAD" 2> /dev/null)" || return 0
+    branch="${head#ref: refs/heads/}"
+    if [ "$branch" != "$head" ] && [[ "$branch" =~ ^[0-9]+\.[0-9]+$ ]] \
+        && [ "$branch" != "${ODOO_VERSION:-$branch}" ]; then
+        log "WARNING: The Enterprise folder is on branch $branch but Odoo is $ODOO_VERSION."
+        log "WARNING: Use the $ODOO_VERSION branch of odoo/enterprise, or set ODOO_VERSION in .env"
+        log "WARNING: to ${branch%.0}. See docs/enterprise.md."
+    fi
+    return 0
 }
 
 has_option() {
@@ -95,6 +127,7 @@ if [ "${1:-}" = "--configure-only" ]; then
     exit 0
 fi
 
+warn_on_version_mismatch
 warn_on_suspicious_enterprise
 build_config
 
