@@ -36,11 +36,18 @@ wait_for_http() {
         [ "$i" -eq 1 ] && echo "Waiting for Odoo to accept requests..."
         sleep 1
     done
-    die "Odoo is not responding. Check the logs: ./odoo.sh logs"
+    die "Odoo is not responding. Check the Odoo logs (the logs command)."
 }
 
 db_exists() {
-    psql -d postgres -Atqc "SELECT 1 FROM pg_database WHERE datname = '$1'" | grep -q 1
+    # Passed as a psql variable (via stdin, as -c does not expand them) to avoid quoting issues.
+    echo "SELECT 1 FROM pg_database WHERE datname = :'db'" \
+        | psql -d postgres -Atq -v db="$1" | grep -q 1
+}
+
+list_dbs() {
+    psql -d postgres -Atc \
+        "SELECT datname FROM pg_database WHERE NOT datistemplate AND datname <> 'postgres' ORDER BY 1"
 }
 
 usage() {
@@ -73,8 +80,14 @@ esac
 case "$cmd" in
     install|update)
         [ $# -ge 1 ] || die "missing module name. Example: $cmd sale,crm"
+        db="$(default_db "${2:-}")"
+        if ! db_exists "$db"; then
+            existing="$(list_dbs | paste -sd, -)"
+            [ "$cmd" = install ] || die "database '$db' does not exist. Existing: ${existing:-<none>}"
+            echo "Database '$db' does not exist yet: creating it (login: admin, password: admin)."
+        fi
         flag=$([ "$cmd" = install ] && echo -i || echo -u)
-        exec odoo -d "$(default_db "${2:-}")" "$flag" "$1" --stop-after-init --no-http
+        exec odoo -d "$db" "$flag" "$1" --stop-after-init --no-http
         ;;
 
     test)
@@ -82,7 +95,8 @@ case "$cmd" in
         db="test_${1//,/_}"
         tags="$(echo "$1" | sed 's/[^,]*/\/&/g')"
         echo "Running tests for '$1' in fresh database '$db'..."
-        dropdb --if-exists "$db"
+        # --force closes connections left open, e.g. by a browser tab on that database.
+        dropdb --if-exists --force "$db"
         # A separate HTTP port avoids clashing with the running server (needed by HttpCase).
         exec odoo -d "$db" -i "$1" --test-enable --test-tags "$tags" \
             --stop-after-init --http-port 8070 --log-level test
@@ -97,8 +111,16 @@ case "$cmd" in
         ;;
 
     dbs)
-        exec psql -d postgres -Atc \
-            "SELECT datname FROM pg_database WHERE NOT datistemplate AND datname <> 'postgres' ORDER BY 1"
+        list_dbs
+        ;;
+
+    info)
+        paths="$(conf_get addons_path)"
+        dbs="$(list_dbs | paste -sd, - | sed 's/,/, /g')"
+        echo "Odoo version: ${ODOO_VERSION:-unknown}"
+        echo "Addons path:  ${paths:-<community modules only>}"
+        echo "Default DB:   $(default_db "")"
+        echo "Databases:    ${dbs:-<none>}"
         ;;
 
     backup)
