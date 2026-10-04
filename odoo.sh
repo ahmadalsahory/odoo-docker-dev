@@ -17,9 +17,9 @@ Stack:
   down                     Stop and remove the containers (data is kept)
   restart                  Restart Odoo (after Python or config changes)
   logs [service]           Follow logs (default: odoo)
-  status                   Show container status
+  status                   Show containers, Odoo version and addons path
   bash                     Open a shell inside the Odoo container
-  tools                    Start pgAdmin on http://localhost:5050
+  tools                    Start pgAdmin (PGADMIN_PORT, default 5050)
   reset                    Delete the containers AND all data of this project
 
 Odoo (DB defaults to ODOO_DB from .env):
@@ -35,13 +35,28 @@ Odoo (DB defaults to ODOO_DB from .env):
 EOF
 }
 
+die() { echo "Error: $*" >&2; exit 1; }
+
 # Allocate a TTY only when there is one (keeps CI and pipes working).
 TTY_FLAG=""
 [ -t 0 ] && [ -t 1 ] || TTY_FLAG="-T"
 
+# Git Bash's default terminal (mintty) is not a real Windows console, so interactive
+# docker commands need winpty there.
+WINPTY=""
+if [ -z "$TTY_FLAG" ] && [ -n "${MSYSTEM:-}" ] && command -v winpty > /dev/null 2>&1; then
+    WINPTY="winpty"
+fi
+
 compose() { docker compose "$@"; }
-# shellcheck disable=SC2086 # TTY_FLAG is intentionally unquoted so it can be empty
-compose_exec() { compose exec $TTY_FLAG "$@"; }
+
+# shellcheck disable=SC2086 # WINPTY and TTY_FLAG are intentionally unquoted so they can be empty
+compose_exec() {
+    [ -n "$(compose ps --status running -q odoo 2> /dev/null)" ] \
+        || die "Odoo is not running. Start it first: ./odoo.sh up"
+    $WINPTY docker compose exec $TTY_FLAG "$@"
+}
+
 helper() { compose_exec odoo odoo-docker "$@"; }
 
 # Restart Odoo and return only once it answers again.
@@ -53,8 +68,24 @@ restart_odoo() {
 # Same precedence as Docker Compose: shell environment, then .env, then default.
 env_value() {
     local value="${!1:-}"
-    [ -n "$value" ] || value="$(sed -n "s/^$1=//p" .env 2>/dev/null | tail -n1 | tr -d '\r')"
+    if [ -z "$value" ] && [ -f .env ]; then
+        # Strip CR, a trailing " # comment" and surrounding quotes, like Compose does.
+        value="$(sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" .env | tail -n1 \
+            | tr -d '\r' | sed -e 's/[[:space:]]#.*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/")"
+    fi
     echo "${value:-$2}"
+}
+
+# Creates the default folders, and refuses custom paths that do not exist (Docker would
+# silently create an empty folder and Odoo would start without those modules).
+check_addons_path() {
+    local var="$1" default="$2" path
+    path="$(env_value "$var" "$default")"
+    if [ "$path" = "$default" ]; then
+        mkdir -p "$default"
+    elif [ ! -d "$path" ]; then
+        die "$var=$path does not exist. Fix the path in .env."
+    fi
 }
 
 prepare() {
@@ -62,10 +93,19 @@ prepare() {
         cp .env.example .env
         echo "Created .env from .env.example. Review it any time."
     fi
+
+    local version
+    version="$(env_value ODOO_VERSION 20)"
+    [[ "$version" =~ ^[0-9]+$ ]] \
+        || die "ODOO_VERSION must be a major version such as 20 (no .0), got '$version'."
+
     # Create bind-mount folders ourselves; otherwise Docker creates them owned by root.
-    mkdir -p addons/enterprise addons/third_party addons/custom backups
+    check_addons_path ENTERPRISE_ADDONS_PATH ./addons/enterprise
+    check_addons_path THIRD_PARTY_ADDONS_PATH ./addons/third_party
+    check_addons_path CUSTOM_ADDONS_PATH ./addons/custom
+    mkdir -p backups
     # The container user (uid 101) writes backups here on Linux.
-    chmod a+rwx backups 2>/dev/null || true
+    chmod a+rwx backups 2> /dev/null || true
 }
 
 cmd="${1:-help}"
@@ -81,7 +121,12 @@ case "$cmd" in
     down)     compose down "$@" ;;
     restart)  restart_odoo ;;
     logs)     compose logs -f --tail 200 "${1:-odoo}" ;;
-    status)   compose ps ;;
+    status)
+        compose ps
+        if [ -n "$(compose ps --status running -q odoo 2> /dev/null)" ]; then
+            helper info
+        fi
+        ;;
     bash)     compose_exec odoo bash ;;
     tools)
         compose --profile tools up -d pgadmin
