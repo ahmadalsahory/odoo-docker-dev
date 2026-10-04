@@ -112,6 +112,128 @@ function Assert-AddonsPath([string] $Name, [string] $Default) {
     }
 }
 
+function Assert-DockerRunning {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        Exit-WithError 'Docker is not installed. Install Docker Desktop: https://www.docker.com/products/docker-desktop/'
+    }
+    $ErrorActionPreference = 'Continue'
+    & docker info *> $null
+    if ($LASTEXITCODE -ne 0) {
+        Exit-WithError ("Docker is not running. Start Docker Desktop, wait until it says it is running, then try again.`n" +
+            'See docs/troubleshooting.md#docker-is-not-running')
+    }
+}
+
+$PortDefaults = [ordered]@{ ODOO_PORT = '8069'; POSTGRES_PORT = '5433'; PGADMIN_PORT = '5050' }
+
+# Returns the validated ports from .env, by setting name.
+function Get-PortSetting {
+    $ports = [ordered]@{}
+    foreach ($name in $PortDefaults.Keys) {
+        $value = Get-EnvValue $name $PortDefaults[$name]
+        if ($value -notmatch '^\d{1,5}$' -or [int]$value -lt 1 -or [int]$value -gt 65535) {
+            Exit-WithError "$name must be a port number between 1 and 65535, got '$value'."
+        }
+        $clash = $ports.Keys | Where-Object { $ports[$_] -eq [int]$value }
+        if ($clash) { Exit-WithError "$clash and $name are both set to $value in .env. Give each one its own port." }
+        $ports[$name] = [int]$value
+    }
+    return $ports
+}
+
+function Get-BindAddress {
+    $address = Get-EnvValue 'BIND_ADDRESS' '127.0.0.1'
+    $parsed = $null
+    if (-not [Net.IPAddress]::TryParse($address, [ref]$parsed)) {
+        Exit-WithError "BIND_ADDRESS must be an IP address such as 127.0.0.1 or 0.0.0.0, got '$address'."
+    }
+    return $address
+}
+
+# Returns $null when the port can be used, otherwise the socket error (e.g. AddressAlreadyInUse).
+function Get-PortBindError([string] $Address, [int] $Port) {
+    $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Parse($Address), $Port)
+    try { $listener.Start(); return $null }
+    catch {
+        $e = $_.Exception
+        while ($e.InnerException) { $e = $e.InnerException }
+        return [string]$e.SocketErrorCode
+    }
+    finally { $listener.Stop() }
+}
+
+# Describes the program listening on a port, and the Windows service behind it if any.
+function Get-PortOwner([int] $Port) {
+    if (-not (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)) { return $null }
+    $connection = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $connection) { return $null }
+    $procId = $connection.OwningProcess
+    $owner = "$((Get-Process -Id $procId -ErrorAction SilentlyContinue).ProcessName) (process $procId)"
+    # Services such as the Odoo Windows installer run Odoo as a child of a service wrapper.
+    $ids = @($procId) + @((Get-CimInstance Win32_Process -Filter "ProcessId = $procId" -ErrorAction SilentlyContinue).ParentProcessId)
+    $filter = ($ids | Where-Object { $_ } | ForEach-Object { "ProcessId = $_" }) -join ' OR '
+    $services = @(Get-CimInstance Win32_Service -Filter $filter -ErrorAction SilentlyContinue | ForEach-Object Name)
+    if ($services) { $owner += ", Windows service '$($services -join "', '")'" }
+    return @{ Text = $owner; Services = $services; ProcessId = $procId }
+}
+
+# Fails with a clear message when another program holds the port. Docker's own error
+# for this is cryptic and differs between systems.
+function Assert-PortFree([string] $Name, [string] $Address, $Ports) {
+    $port = $Ports[$Name]
+    $ErrorActionPreference = 'Continue'
+    # Containers of this project may hold the port already: Compose reuses or replaces them.
+    $own = @(& docker compose ps -q 2> $null)
+    $publishers = @(& docker ps --no-trunc --filter "publish=$port" --format '{{.ID}} {{.Names}}' 2> $null)
+    if ($publishers | Where-Object { $own -contains ($_ -split ' ')[0] }) { return }
+    $containers = @($publishers | ForEach-Object { ($_ -split ' ')[1] })
+
+    $stop = $null
+    if ($containers) {
+        $problem = "is used by the Docker container $($containers -join ', ')"
+        $stop = "Stop it: docker stop $($containers -join ' ')"
+    }
+    else {
+        $bindError = Get-PortBindError $Address $port
+        if ($null -eq $bindError) { return }
+        if ($bindError -eq 'AddressNotAvailable') {
+            Exit-WithError "BIND_ADDRESS=$Address is not an address of this computer. Use 127.0.0.1, or 0.0.0.0 for every network."
+        }
+        $owner = Get-PortOwner $port
+        if ($owner -and $owner.Services) {
+            $problem = "is used by $($owner.Text)"
+            $stop = "Stop the service, as administrator: Stop-Service '$($owner.Services[0])'. " +
+                'Set it to Manual in services.msc so it does not start with Windows again.'
+        }
+        elseif ($owner -and $owner.ProcessId -eq 4) {
+            # The System process: a Windows component such as http.sys (IIS, WinRM...).
+            $problem = 'is used by Windows itself (System process)'
+        }
+        elseif ($owner) {
+            $problem = "is used by $($owner.Text)"
+            $stop = 'Close that program.'
+        }
+        elseif ($bindError -eq 'AccessDenied') {
+            # No program holds it: it is in a range Windows keeps for itself (Hyper-V, WSL...).
+            $problem = 'is reserved by Windows (list: netsh int ipv4 show excludedportrange protocol=tcp)'
+        }
+        else {
+            $problem = "cannot be used ($bindError)"
+        }
+    }
+
+    # Windows reserves ports in blocks of 100, so look a bit further than that.
+    $suggestion = ($port + 1)..([Math]::Min($port + 200, 65535)) | Where-Object {
+        $Ports.Values -notcontains $_ -and $null -eq (Get-PortBindError $Address $_)
+    } | Select-Object -First 1
+    $other = if ($suggestion) { "set $Name=$suggestion in .env (free right now)" } else { "set another $Name in .env" }
+    $options = @("Use another port: $other, then run the command again.")
+    if ($stop) { $options = @($stop) + $options }
+    Exit-WithError ("Port $port ($Name) $problem.`n" +
+        (($options | ForEach-Object { "  - $_" }) -join "`n") + "`n" +
+        'Details: docs/troubleshooting.md#port-already-in-use')
+}
+
 function Initialize-Project {
     if (-not (Test-Path .env)) {
         Copy-Item .env.example .env
@@ -131,9 +253,13 @@ function Initialize-Project {
 
 Push-Location -LiteralPath $PSScriptRoot
 try {
+    if ($Command -notin 'help', '-h', '--help') { Assert-DockerRunning }
     switch ($Command) {
         'up' {
             Initialize-Project
+            $ports = Get-PortSetting
+            Assert-PortFree 'ODOO_PORT' (Get-BindAddress) $ports
+            Assert-PortFree 'POSTGRES_PORT' '127.0.0.1' $ports
             Write-Host 'Starting... the first run downloads images and can take a few minutes.'
             Invoke-Compose up -d --build --wait @Rest
             Write-Host "Odoo is ready at http://localhost:$(Get-EnvValue 'ODOO_PORT' '8069')"
@@ -150,6 +276,7 @@ try {
         }
         'bash'    { Invoke-ComposeExec odoo bash }
         'tools' {
+            Assert-PortFree 'PGADMIN_PORT' '127.0.0.1' (Get-PortSetting)
             Invoke-Compose --profile tools up -d pgadmin
             Write-Host "pgAdmin is at http://localhost:$(Get-EnvValue 'PGADMIN_PORT' '5050')"
         }

@@ -89,6 +89,124 @@ check_addons_path() {
     fi
 }
 
+check_docker() {
+    command -v docker > /dev/null 2>&1 \
+        || die "Docker is not installed. See https://docs.docker.com/get-started/get-docker/"
+    docker info > /dev/null 2>&1 \
+        || die "Docker is not running. Start Docker Desktop (Linux: sudo systemctl start docker), then try again.
+See docs/troubleshooting.md#docker-is-not-running"
+}
+
+port_default() {
+    case "$1" in
+        ODOO_PORT) echo 8069 ;;
+        POSTGRES_PORT) echo 5433 ;;
+        PGADMIN_PORT) echo 5050 ;;
+    esac
+}
+
+port_value() { env_value "$1" "$(port_default "$1")"; }
+
+check_port_settings() {
+    local name value other address
+    for name in ODOO_PORT POSTGRES_PORT PGADMIN_PORT; do
+        value="$(port_value "$name")"
+        if ! [[ "$value" =~ ^[0-9]{1,5}$ ]] || [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
+            die "$name must be a port number between 1 and 65535, got '$value'."
+        fi
+        for other in ODOO_PORT POSTGRES_PORT PGADMIN_PORT; do
+            [ "$other" = "$name" ] && break
+            if [ "$(port_value "$other")" -eq "$value" ]; then
+                die "$other and $name are both set to $value in .env. Give each one its own port."
+            fi
+        done
+    done
+    address="$(env_value BIND_ADDRESS 127.0.0.1)"
+    if ! [[ "$address" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ || "$address" == *:* ]]; then
+        die "BIND_ADDRESS must be an IP address such as 127.0.0.1 or 0.0.0.0, got '$address'."
+    fi
+}
+
+# Prints the PID listening on a TCP port, Windows (Git Bash) only. Matches the foreign
+# address 0.0.0.0:0 rather than the state, which Windows translates.
+windows_listener_pid() {
+    netstat -ano -p tcp | tr -d '\r' | awk -v p=":$1" '
+        $1 == "TCP" && $3 == "0.0.0.0:0" && substr($2, length($2) - length(p) + 1) == p { print $NF; exit }'
+}
+
+windows_port_reserved() {
+    netsh int ipv4 show excludedportrange protocol=tcp | tr -d '\r' | awk -v p="$1" '
+        $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ && p + 0 >= $1 + 0 && p + 0 <= $2 + 0 { found = 1 }
+        END { exit !found }'
+}
+
+# Succeeds when something already listens on the port, or Windows reserves it.
+port_taken() {
+    if [ -n "${MSYSTEM:-}" ]; then
+        # Git Bash: connecting to a closed port takes about two seconds on Windows.
+        [ -n "$(windows_listener_pid "$1")" ] || windows_port_reserved "$1"
+    else
+        (exec 3<> "/dev/tcp/127.0.0.1/$1") 2> /dev/null
+    fi
+}
+
+# Fails with a clear message when another program holds the port. Docker's own error
+# for this is cryptic and differs between systems.
+check_port_free() {
+    local name="$1" port own id cname containers="" pid problem stop="" candidate other suggestion=""
+    port="$(port_value "$name")"
+
+    # Containers of this project may hold the port already: Compose reuses or replaces them.
+    own=" $(compose ps -q 2> /dev/null | tr -d '\r' | tr '\n' ' ') "
+    while read -r id cname; do
+        [ -n "$id" ] || continue
+        [[ "$own" != *" $id "* ]] || return 0
+        containers="${containers:+$containers }$cname"
+    done < <(docker ps --no-trunc --filter "publish=$port" --format '{{.ID}} {{.Names}}' | tr -d '\r')
+
+    if [ -n "$containers" ]; then
+        problem="is used by the Docker container $containers"
+        stop="Stop it: docker stop $containers"
+    elif ! port_taken "$port"; then
+        return 0
+    elif [ -n "${MSYSTEM:-}" ] && pid="$(windows_listener_pid "$port")" && [ -n "$pid" ]; then
+        if [ "$pid" = 4 ]; then
+            problem="is used by Windows itself (System process)"
+        else
+            problem="is used by $(tasklist /FI "PID eq $pid" /FO CSV /NH | tr -d '\r"' | cut -d, -f1) (process $pid)"
+            stop="Close that program. If it is a Windows service, stop it in services.msc."
+        fi
+    elif [ -n "${MSYSTEM:-}" ]; then
+        problem="is reserved by Windows (list: netsh int ipv4 show excludedportrange protocol=tcp)"
+    else
+        problem="is used by another program"
+        stop="Close that program. To find it: sudo lsof -i :$port"
+    fi
+
+    # Windows reserves ports in blocks of 100, so look a bit further than that.
+    for candidate in $(seq $((port + 1)) $((port + 200 > 65535 ? 65535 : port + 200))); do
+        for other in ODOO_PORT POSTGRES_PORT PGADMIN_PORT; do
+            [ "$(port_value "$other")" -eq "$candidate" ] && continue 2
+        done
+        if ! port_taken "$candidate"; then
+            suggestion="$candidate"
+            break
+        fi
+    done
+
+    {
+        echo "Error: Port $port ($name) $problem."
+        [ -z "$stop" ] || echo "  - $stop"
+        if [ -n "$suggestion" ]; then
+            echo "  - Use another port: set $name=$suggestion in .env (free right now), then run the command again."
+        else
+            echo "  - Use another port: set another $name in .env, then run the command again."
+        fi
+        echo "Details: docs/troubleshooting.md#port-already-in-use"
+    } >&2
+    exit 1
+}
+
 prepare() {
     if [ ! -f .env ]; then
         cp .env.example .env
@@ -113,8 +231,16 @@ cmd="${1:-help}"
 shift || true
 
 case "$cmd" in
+    help|-h|--help) ;;
+    *) check_docker ;;
+esac
+
+case "$cmd" in
     up)
         prepare
+        check_port_settings
+        check_port_free ODOO_PORT
+        check_port_free POSTGRES_PORT
         echo "Starting... the first run downloads images and can take a few minutes."
         compose up -d --build --wait "$@"
         echo "Odoo is ready at http://localhost:$(env_value ODOO_PORT 8069)"
@@ -130,6 +256,8 @@ case "$cmd" in
         ;;
     bash)     compose_exec odoo bash ;;
     tools)
+        check_port_settings
+        check_port_free PGADMIN_PORT
         compose --profile tools up -d pgadmin
         echo "pgAdmin is at http://localhost:$(env_value PGADMIN_PORT 5050)"
         ;;
