@@ -1,5 +1,9 @@
 # Configuration
 
+Reference of every setting. For step-by-step guides, see the [list of guides](../README.md#what-do-you-want-to-do).
+
+On this page, `up`, `restart` and the other commands mean `./odoo.sh <command>` on Linux, macOS and Git Bash, or `.\odoo.ps1 <command>` in Windows PowerShell.
+
 There are two places to configure things:
 
 - **`.env`** for everything about the containers: Odoo version, passwords, ports, folders. It is created from [`.env.example`](../.env.example), and every option is explained there.
@@ -7,7 +11,9 @@ There are two places to configure things:
 
 After changing `.env`, run `up`. After changing `odoo.conf`, run `restart`.
 
-The one exception is `ODOO_VERSION`: run `down` **before** changing it. See [Switching Odoo version](../README.md#switching-odoo-version).
+The one exception is `ODOO_VERSION`: run `down` **before** changing it. See [Switch to another Odoo version](switch-version.md).
+
+Related guides: [ports and network](ports-and-network.md), [ready-made modules](third-party-modules.md), [Python packages](python-packages.md), [two setups at the same time](several-instances.md).
 
 ## `.env` reference
 
@@ -58,29 +64,6 @@ Run `status` to see the resulting path. To take full control, set `addons_path` 
 
 The same rule applies to `admin_passwd`, `db_host`, `db_port`, `db_user` and `db_password`. They come from `.env` unless `config/odoo.conf` sets them.
 
-## Third-party modules
-
-Clone or copy them into `addons/third_party`, on the branch that matches `ODOO_VERSION`. For example, for the OCA `web` repository and `ODOO_VERSION=19`:
-
-```bash
-git clone --branch 19.0 --depth 1 https://github.com/OCA/web.git addons/third_party/web
-./odoo.sh restart
-```
-
-OCA usually publishes the branch for a new Odoo version weeks or months after its release. If `git` says `Remote branch ... not found`, that version is not available yet.
-
-`addons/third_party` is ignored by Git by default, because these are usually separate repositories. To version them with your project, add them as [Git submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules), or copy the modules without their `.git` folder and remove the `addons/third_party/*` lines from `.gitignore`.
-
-## Extra Python packages
-
-If a module needs a Python package that is not in the Odoo image, add it to [`requirements.txt`](../requirements.txt) and run `up`. The image is rebuilt with the package installed.
-
-```text
-pandas==2.2.3
-```
-
-Pin versions so everyone on your team gets the same build.
-
 ## Developer mode
 
 `ODOO_DEV_MODE` passes `--dev` to the Odoo server. It takes a comma-separated list:
@@ -99,36 +82,16 @@ Pin versions so everyone on your team gets the same build.
 
 This is the server's developer mode. The developer mode of the web interface is turned on separately, by adding `?debug=1` to the URL.
 
-## Running several instances
-
-Each copy of this template is one Odoo instance. To run more than one at the same time, for example Odoo 18 and 20, or two projects on the same version:
-
-1. Make a second copy of the template in another folder.
-2. In its `.env`, change `ODOO_PORT`, `POSTGRES_PORT` and `PGADMIN_PORT` (e.g. `8070`, `5434`, `5051`).
-3. **If both copies use the same `ODOO_VERSION`, give each one its own `PROJECT_NAME`** (e.g. `PROJECT_NAME=client-a`). Otherwise both copies use the same containers and databases, and starting one replaces the other.
-
-## Reaching Odoo from other devices
-
-By default Odoo only listens on `127.0.0.1`, so nothing outside your machine can connect. To open it on a phone or another computer on your network:
-
-1. Set `BIND_ADDRESS=0.0.0.0` and a stronger `ADMIN_PASSWORD` in `.env`.
-2. Run `up`.
-3. Browse to `http://<your-computer-ip>:<ODOO_PORT>`, e.g. `http://192.168.1.20:8069`.
-
-Only Odoo is exposed this way. PostgreSQL and pgAdmin stay reachable from your machine only.
-
 ## Email
 
-There is no mail server in this stack. Emails that Odoo sends fail and stay in the outgoing queue (**Settings > Technical > Emails**), which keeps a local copy from emailing real people. To test sending, configure an outgoing mail server in Odoo, or set `smtp_*` options in `config/odoo.conf`.
+There is no mail server in this stack. Emails that Odoo sends fail and stay in the outgoing queue (**Settings > Technical > Emails**), which keeps a local copy from emailing real people. A copy of a production database brings its own mail servers along, which is why it must be [neutralized](production-copy.md). To test sending, configure an outgoing mail server in Odoo, or set `smtp_*` options in `config/odoo.conf`.
 
 ## pgAdmin
 
-```bash
-./odoo.sh tools
-```
-
-pgAdmin opens at `http://localhost:<PGADMIN_PORT>` (default <http://localhost:5050>) without a login, and already has a server named **Odoo**. When it asks, the database password is `POSTGRES_PASSWORD` (`odoo` by default).
+How to open it: [Look inside the database](start-stop.md#look-inside-the-database). pgAdmin runs without a login screen, and only your own computer can reach it.
 
 The server list is read from [`config/pgadmin-servers.json`](../config/pgadmin-servers.json) only the first time pgAdmin starts. If you use another `POSTGRES_USER`, edit `Username` in that file **before** the first `tools`, or change it later in pgAdmin itself.
 
-You can also use any desktop client on `localhost:<POSTGRES_PORT>` (default `5433`).
+---
+
+[Back to the list of guides](../README.md#what-do-you-want-to-do)
