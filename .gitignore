@@ -3,6 +3,7 @@
 
 # Odoo Enterprise source is licensed under OEEL-1 and must never be committed
 addons/enterprise/
+/enterprise/
 
 # Local addons and runtime artifacts
 addons/third_party/*
