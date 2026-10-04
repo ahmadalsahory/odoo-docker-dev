@@ -9,7 +9,7 @@ If you only want to go back and forth between versions, not run them together, [
 Clone it again into another folder, next to the first one:
 
 ```bash
-git clone https://github.com/<owner>/odoo-docker-dev.git odoo-docker-dev-18
+git clone https://github.com/ahmadalsahory/odoo-docker-dev.git odoo-docker-dev-18
 cd odoo-docker-dev-18
 ```
 

@@ -24,7 +24,7 @@ You should see `Docker Compose version v2.20` or newer. If you see `command not 
 ## 2. Get this project
 
 ```bash
-git clone https://github.com/<owner>/odoo-docker-dev.git
+git clone https://github.com/ahmadalsahory/odoo-docker-dev.git
 cd odoo-docker-dev
 ```
 
