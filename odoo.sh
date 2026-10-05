@@ -89,6 +89,22 @@ check_addons_path() {
     fi
 }
 
+# Prints "<hash> <unix time>" of the Enterprise checkout, so the image installs the
+# matching Community build (see docker/match-community.sh). Prints nothing when there
+# is no Enterprise Git clone.
+enterprise_commit() {
+    local path
+    path="$(env_value ENTERPRISE_ADDONS_PATH ./addons/enterprise)"
+    [ -e "$path/.git" ] || return 0
+    if ! command -v git > /dev/null 2>&1; then
+        echo "Warning: Git is not installed, so Odoo cannot be matched to your Enterprise version." >&2
+        return 0
+    fi
+    # safe.directory: on Windows, folders on other drives often trip Git's ownership check.
+    git -c safe.directory='*' -C "$path" log -1 --format='%H %ct' 2> /dev/null \
+        || echo "Warning: cannot read the Enterprise commit in $path, so Odoo cannot be matched to it." >&2
+}
+
 check_docker() {
     command -v docker > /dev/null 2>&1 \
         || die "Docker is not installed. See https://docs.docker.com/get-started/get-docker/"
@@ -241,6 +257,8 @@ case "$cmd" in
         check_port_settings
         check_port_free ODOO_PORT
         check_port_free POSTGRES_PORT
+        read -r ENTERPRISE_COMMIT ENTERPRISE_COMMIT_TIME <<< "$(enterprise_commit)" || true
+        export ENTERPRISE_COMMIT ENTERPRISE_COMMIT_TIME
         echo "Starting... the first run downloads images and can take a few minutes."
         compose up -d --build --wait "$@"
         echo "Odoo is ready at http://localhost:$(env_value ODOO_PORT 8069)"

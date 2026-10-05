@@ -128,6 +128,7 @@ case "$cmd" in
         paths="$(conf_get addons_path)"
         dbs="$(list_dbs | paste -sd, - | sed 's/,/, /g')"
         echo "Odoo version: ${ODOO_VERSION:-unknown}"
+        echo "Odoo build:   $(dpkg-query -W -f='${Version}' odoo 2> /dev/null || echo unknown)"
         echo "Addons path:  ${paths:-<community modules only>}"
         echo "Default DB:   $(default_db "")"
         echo "Databases:    ${dbs:-<none>}"

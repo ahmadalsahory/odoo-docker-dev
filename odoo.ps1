@@ -234,6 +234,26 @@ function Assert-PortFree([string] $Name, [string] $Address, $Ports) {
         'Details: docs/troubleshooting.md#port-already-in-use')
 }
 
+# Returns "<hash> <unix time>" of the Enterprise checkout, so the image installs the
+# matching Community build (see docker/match-community.sh). Empty when there is no
+# Enterprise Git clone.
+function Get-EnterpriseCommit {
+    $path = Get-EnvValue 'ENTERPRISE_ADDONS_PATH' './addons/enterprise'
+    if (-not (Test-Path (Join-Path $path '.git'))) { return '' }
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        Write-Host 'Warning: Git is not installed, so Odoo cannot be matched to your Enterprise version.' -ForegroundColor Yellow
+        return ''
+    }
+    $ErrorActionPreference = 'Continue'
+    # safe.directory: folders on other drives often trip Git's ownership check.
+    $result = & git -c 'safe.directory=*' -C $path log -1 --format='%H %ct' 2> $null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Warning: cannot read the Enterprise commit in $path, so Odoo cannot be matched to it." -ForegroundColor Yellow
+        return ''
+    }
+    return "$result".Trim()
+}
+
 function Initialize-Project {
     if (-not (Test-Path .env)) {
         Copy-Item .env.example .env
@@ -260,6 +280,9 @@ try {
             $ports = Get-PortSetting
             Assert-PortFree 'ODOO_PORT' (Get-BindAddress) $ports
             Assert-PortFree 'POSTGRES_PORT' '127.0.0.1' $ports
+            $commit = @((Get-EnterpriseCommit) -split ' ') + @('', '')
+            $env:ENTERPRISE_COMMIT = $commit[0]
+            $env:ENTERPRISE_COMMIT_TIME = $commit[1]
             Write-Host 'Starting... the first run downloads images and can take a few minutes.'
             Invoke-Compose up -d --build --wait @Rest
             Write-Host "Odoo is ready at http://localhost:$(Get-EnvValue 'ODOO_PORT' '8069')"

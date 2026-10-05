@@ -108,6 +108,8 @@ Not sure of your database names? `dbs` lists them:
 
 **Versions must match.** Odoo 20 with Enterprise 19.0 does not work and fails in confusing ways. When `addons/enterprise` is a Git clone on a branch like `19.0`, the Odoo log shows a warning if it does not match. To change version later, see [Switch to another Odoo version](switch-version.md).
 
+**Dates must match too, and `up` takes care of it.** Enterprise relies on Odoo code from the same day. `up` reads the date of your Enterprise clone and installs the Odoo build of that day (about 230 MB, downloaded once per Enterprise update). This needs `addons/enterprise` to be a Git clone and Git to be installed. After a `git pull`, run `up` again, not `restart`.
+
 **Keeping it up to date.** See [Update Odoo and Enterprise](update.md).
 
 **Never commit Enterprise.** Odoo Enterprise is licensed under the [Odoo Enterprise Edition License (OEEL-1)](https://www.odoo.com/documentation/master/legal/licenses.html). Publishing it, including in a public Git repository, breaks that license. The project is set up so this cannot happen by accident: `addons/enterprise/` is in `.gitignore`, and `.dockerignore` keeps it out of the Docker image. Keep it that way:

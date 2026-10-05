@@ -33,6 +33,29 @@ jobs:
       - name: Validate docker-compose.yml
         run: docker compose --profile tools config --quiet
 
+  # Enterprise cannot run in public CI, so pretend there is an Enterprise commit from three
+  # days ago and check that the image gets the Community build that follows it.
+  match-community:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ODOO_VERSION: "19"
+      ENTERPRISE_COMMIT: 0123456789abcdef0123456789abcdef01234567
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build for an Enterprise commit from three days ago
+        run: ENTERPRISE_COMMIT_TIME="$(date -u -d '3 days ago' +%s)" docker compose build odoo
+
+      - name: Check the Community build
+        run: |
+          run() { docker compose run --rm --no-deps -T --entrypoint "$1" odoo "${@:2}"; }
+          build="$(run dpkg-query -W -f='${Version}' odoo)"
+          echo "Odoo build: $build"
+          [[ "${build##*.}" > "$(date -u -d '3 days ago' +%Y%m%d)" ]]
+          [ "$(run cat /etc/odoo/enterprise-commit)" = "$ENTERPRISE_COMMIT" ]
+
   # Community smoke test of every supported version (Enterprise cannot run in public CI).
   smoke:
     needs: lint

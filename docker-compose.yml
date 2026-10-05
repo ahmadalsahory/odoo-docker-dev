@@ -30,6 +30,9 @@ services:
       context: .
       args:
         ODOO_TAG: ${ODOO_TAG:-${ODOO_VERSION:-20}}
+        # Set by odoo.sh / odoo.ps1 up from the Enterprise Git clone.
+        ENTERPRISE_COMMIT: ${ENTERPRISE_COMMIT:-}
+        ENTERPRISE_COMMIT_TIME: ${ENTERPRISE_COMMIT_TIME:-}
     depends_on:
       db:
         condition: service_healthy

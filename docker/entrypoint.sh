@@ -80,6 +80,43 @@ warn_on_suspicious_enterprise() {
     return 0
 }
 
+# Prints the commit checked out in a Git folder, without needing Git in the image.
+git_head() {
+    local git="$1/.git" head ref
+    [ -f "$git/HEAD" ] || return 0
+    head="$(tr -d '\r' < "$git/HEAD")"
+    case "$head" in
+        "ref: "*)
+            ref="${head#ref: }"
+            if [ -f "$git/$ref" ]; then
+                tr -d '\r' < "$git/$ref"
+            elif [ -f "$git/packed-refs" ]; then
+                awk -v ref="$ref" '{ sub(/\r$/, "") } $2 == ref { print $1; exit }' "$git/packed-refs"
+            fi
+            ;;
+        *) echo "$head" ;;
+    esac
+}
+
+# The image holds the Community build matching the Enterprise commit it was built for
+# (see match-community.sh). After a git pull, only "up" installs the new match.
+warn_on_unmatched_enterprise() {
+    local current built
+    current="$(git_head /mnt/enterprise-addons)"
+    [ -n "$current" ] || return 0
+    built="$(cat /etc/odoo/enterprise-commit 2> /dev/null)" || true
+    [ "$current" != "$built" ] || return 0
+    if [ -z "$built" ]; then
+        log "WARNING: Odoo was not matched to your Enterprise version, so some Enterprise"
+        log "WARNING: modules may fail to install. Start Odoo with ./odoo.sh up (or .\\odoo.ps1 up)."
+    else
+        log "WARNING: Enterprise changed since Odoo was built for it, so some Enterprise"
+        log "WARNING: modules may fail to install. Run ./odoo.sh up (or .\\odoo.ps1 up) to match them."
+    fi
+    log "WARNING: See docs/update.md."
+    return 0
+}
+
 has_option() {
     [ -f "$BASE_CONF" ] && grep -qE "^\s*$1\s*=" "$BASE_CONF"
 }
@@ -129,6 +166,7 @@ fi
 
 warn_on_version_mismatch
 warn_on_suspicious_enterprise
+warn_on_unmatched_enterprise
 build_config
 
 # Enable developer mode for the main server process only.

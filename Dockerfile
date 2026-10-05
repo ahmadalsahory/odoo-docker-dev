@@ -5,6 +5,15 @@ FROM odoo:${ODOO_TAG}
 
 USER root
 
+# Community code matching the Enterprise checkout (see docker/match-community.sh).
+# odoo.sh / odoo.ps1 up pass these; empty means the image is used as it is.
+ARG ENTERPRISE_COMMIT=
+ARG ENTERPRISE_COMMIT_TIME=
+COPY docker/match-community.sh /tmp/match-community.sh
+RUN sed -i 's/\r$//' /tmp/match-community.sh \
+    && bash /tmp/match-community.sh "$ENTERPRISE_COMMIT" "$ENTERPRISE_COMMIT_TIME" \
+    && rm /tmp/match-community.sh
+
 # Extra Python dependencies for your modules (see requirements.txt).
 # The env var (rather than --break-system-packages) is understood by the newer pip
 # in Odoo 18+ images and silently ignored by the older pip in the Odoo 17 image.

@@ -38,6 +38,7 @@ Restart after you change Python code, edit `config/odoo.conf`, or add a module f
 
 ```text
 Odoo version: 19.0
+Odoo build:   19.0.20261004
 Addons path:  /mnt/enterprise-addons,/mnt/custom-addons
 Default DB:   odoo
 Databases:    odoo

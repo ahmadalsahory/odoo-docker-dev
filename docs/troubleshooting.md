@@ -20,6 +20,8 @@ Find the message you see in the table, or the problem you have below it. For an 
 | `Odoo is not running. Start it first` | [Odoo is not running](#odoo-is-not-running-start-it-first) |
 | `container ... is unhealthy`, Odoo keeps restarting | [Odoo keeps restarting](#odoo-keeps-restarting-or-up-says-container-is-unhealthy) |
 | `[odoo-docker-dev] WARNING` in the Odoo log | [Warnings in the log](#warnings-in-the-log) |
+| `ImportError: cannot import name ...` from an Enterprise module | [Enterprise module fails to install](#enterprise-module-fails-to-install) |
+| `cannot reach https://nightly.odoo.com/...`, `checksum mismatch` | [Enterprise module fails to install](#enterprise-module-fails-to-install) |
 | `backup failed`, `restore failed`, `Access Denied` | [Backup or restore fails](#backup-or-restore-fails) |
 | `the input device is not a TTY` | [Git Bash: not a TTY](#git-bash-the-input-device-is-not-a-tty) |
 | `/bin/bash^M: bad interpreter`, `$'\r': command not found` | [Windows line endings](#binbashm-bad-interpreter-or-r-command-not-found) |
@@ -137,8 +139,24 @@ Lines starting with `[odoo-docker-dev] WARNING` at the top of the Odoo log point
 **`The Enterprise folder is on branch 19.0 but Odoo is 20.0`**
 Enterprise and Odoo must be the same version. Clone the right branch, or change `ODOO_VERSION`. See [Add Odoo Enterprise](enterprise.md#1-download-enterprise).
 
+**`Enterprise changed since Odoo was built for it`** or **`Odoo was not matched to your Enterprise version`**
+Enterprise was updated (`git pull`) and Odoo was restarted without `up`, or Odoo was started with plain `docker compose`. Run `up`. See [Update Odoo and Enterprise](update.md#2-start-odoo-with-the-new-code).
+
 **`The Enterprise folder looks like a full Odoo source tree`**
 `addons/enterprise` holds a copy of all of Odoo instead of the `odoo/enterprise` repository. See [common mistakes](enterprise.md#common-mistakes).
+
+## Enterprise module fails to install
+
+```text
+File "/mnt/enterprise-addons/account_accountant/models/account_bank_statement.py", line 14, in <module>
+ImportError: cannot import name '_ignore_tax_lock_date' from 'odoo.addons.account.models.account_move_line'
+```
+
+Your Enterprise code and the Odoo code in the image are from different days. Run `up`: it installs the Odoo build matching your Enterprise (see [Update Odoo and Enterprise](update.md#2-start-odoo-with-the-new-code)). If the error stays, `up` could not do that, and printed why:
+
+- **`Git is not installed` / `cannot read the Enterprise commit`**: `up` reads the Enterprise date with Git. Install Git, and keep `addons/enterprise` a Git clone (a downloaded copy has no date to read).
+- **`cannot reach https://nightly.odoo.com/...`**: the Odoo build is downloaded from there. Check the internet connection or proxy, then run `up` again.
+- **`checksum mismatch`**: the download was damaged. Run `up` again.
 
 ## Backup or restore fails
 

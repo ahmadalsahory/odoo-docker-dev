@@ -1,12 +1,12 @@
 # Update Odoo and Enterprise to the latest fixes
 
-Odoo publishes fixes for each version almost every day, both in the Odoo image and in the Enterprise repository. Your setup does not update by itself: it keeps the code it downloaded first, until you update it.
+Odoo publishes fixes for each version almost every day, both for Odoo itself and in the Enterprise repository. Your setup does not update by itself: it keeps the code it downloaded first, until you update it.
 
 Updating stays within your version: Odoo 19 gets the latest Odoo 19 fixes. To move to another version, see [Switch to another Odoo version](switch-version.md).
 
-Update Odoo and Enterprise together, so they stay in step.
+## 1. Get the latest code
 
-## 1. Enterprise only: get the latest Enterprise
+**With Enterprise**, update the Enterprise clone:
 
 ```bash
 git -C addons/enterprise pull
@@ -14,26 +14,31 @@ git -C addons/enterprise pull
 
 The command is the same on every system. Do the same for each repository in `addons/third_party`, e.g. `git -C addons/third_party/web pull`.
 
-## 2. Get the latest Odoo image
+**Without Enterprise**, get the latest Odoo image instead:
 
 ```bash
 docker compose build --pull
 ```
 
-The command is the same on every system. It downloads the newest image of your Odoo version and rebuilds on top of it.
-
-If you pinned an exact build with `ODOO_TAG` in `.env`, this keeps that build. Change `ODOO_TAG` to a newer one first ([list of tags](https://hub.docker.com/_/odoo/tags)), or remove it.
-
-## 3. Restart Odoo with the new code
+## 2. Start Odoo with the new code
 
 | Linux / macOS / Git Bash | Windows PowerShell |
 |---|---|
 | `./odoo.sh up` | `.\odoo.ps1 up` |
-| `./odoo.sh restart` | `.\odoo.ps1 restart` |
 
-`up` switches to the new image. `restart` makes sure Odoo also loads the new Enterprise code, in case `up` had nothing to change.
+**With Enterprise, `up` matches Odoo to it.** Enterprise relies on Odoo code from the same day, and the Odoo image is only published about once a week. So `up` looks up the date of your Enterprise code and installs the Odoo build of that day from [Odoo's nightly builds](https://nightly.odoo.com), the packages the official image is made of. This downloads about 230 MB each time Enterprise has moved to a new day, so it needs internet then. The log shows which build it picked:
 
-## 4. Update your databases
+```text
+[odoo-docker-dev] Enterprise is from 20261003: replacing Odoo Community build 20260926 with 20261004.
+```
+
+Use `up` after every `git pull`, not `restart`: `restart` keeps the old Odoo code, and some Enterprise modules then fail to install with errors such as `ImportError: cannot import name ...`. The Odoo log warns when this happens. `status` shows the build in use:
+
+```text
+Odoo build:   19.0.20261004
+```
+
+## 3. Update your databases
 
 New code can change data and views, which only reach a database when its modules are updated. For each database you keep using, here `odoo`:
 
